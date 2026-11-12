@@ -1,0 +1,49 @@
+// CPU.hdl - Hack CPU
+// instruction bits (C-instruction): 1 1 1 a c1 c2 c3 c4 c5 c6 d1 d2 d3 j1 j2 j3
+//                           index: 15    12 11 10 9  8  7  6  5  4  3  2  1  0
+CHIP CPU {
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current program
+    OUT outM[16],        // M value output
+        writeM,          // Write into M?
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // Address of next instruction
+
+    PARTS:
+    // ---- decode ----
+    Not(in=instruction[15], out=isA);          // A-instruction
+    // ---- A register ----
+    Mux16(a=instruction, b=aluOut, sel=instruction[15], out=aIn);
+    And(a=instruction[15], b=instruction[5], out=destA);   // d1
+    Or(a=isA, b=destA, out=loadA);
+    ARegister(in=aIn, load=loadA, out=aOut, out[0..14]=addressM);
+
+    // ---- ALU inputs ----
+    Mux16(a=aOut, b=inM, sel=instruction[12], out=aluY);   // a-bit: A or M
+    And(a=instruction[15], b=instruction[4], out=loadD);   // d2
+    DRegister(in=aluOut, load=loadD, out=dOut);
+
+    // ---- ALU ----
+    ALU(x=dOut, y=aluY,
+        zx=instruction[11], nx=instruction[10],
+        zy=instruction[9],  ny=instruction[8],
+        f=instruction[7],   no=instruction[6],
+        out=aluOut, out=outM, zr=zr, ng=ng);
+
+    // ---- write to memory ----
+    And(a=instruction[15], b=instruction[3], out=writeM);  // d3
+
+    // ---- jump logic ----
+    Or(a=zr, b=ng, out=zrOrNg);
+    Not(in=zrOrNg, out=pos);                    // out > 0
+    And(a=instruction[2], b=ng,  out=jLT);      // j1: out < 0
+    And(a=instruction[1], b=zr,  out=jEQ);      // j2: out = 0
+    And(a=instruction[0], b=pos, out=jGT);      // j3: out > 0
+    Or(a=jLT, b=jEQ, out=jLE);
+    Or(a=jLE, b=jGT, out=jumpCond);
+    And(a=instruction[15], b=jumpCond, out=jump);
+
+    // ---- program counter ----
+    PC(in=aOut, load=jump, inc=true, reset=reset, out[0..14]=pc);
+}

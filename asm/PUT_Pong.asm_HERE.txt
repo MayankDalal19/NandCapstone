@@ -1,0 +1,1 @@
+Copy Pong.asm from the official nand2tetris projects/06 folder into this folder (asm/Pong.asm).
